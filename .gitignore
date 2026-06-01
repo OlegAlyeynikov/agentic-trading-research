@@ -60,5 +60,5 @@ param_search_results.csv
 # Local scratch files accidentally committed during initial publish.
 docs/Strategies.md
 funding_download.py
-docs
+docs/FundingDivergenceStrategy.md
 AGENTS.md
