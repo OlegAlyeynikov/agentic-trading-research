@@ -1,0 +1,63 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+.venv*/
+
+# Local IDE and OS metadata
+.idea/
+.vscode/
+.DS_Store
+.claude/
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+research_config.json
+research_config.local.json
+
+# Local datasets and generated research artifacts
+data/
+draft/
+draft.log
+*.log
+*.csv
+*.pkl
+*.parquet
+*.feather
+*.h5
+*.sqlite
+*.sqlite3
+
+# Agent-generated state. Keep directory placeholders only.
+.logs/
+agent_research/logs/
+agent_research/reports/
+agent_research/workspace/
+agent_research/experiments/*
+!agent_research/experiments/.gitkeep
+agent_research/approved/
+agent_research/promising_runs/
+agent_research/final_artifacts/
+agent_research/param_search/
+agent_research/portfolio_backtests/
+
+# Legacy/generated strategy output
+stat_arb/output/
+backtest_summary.json
+param_search_results.csv
+
+# Local scratch files accidentally committed during initial publish.
+docs/Strategies.md
+funding_download.py
+docs
