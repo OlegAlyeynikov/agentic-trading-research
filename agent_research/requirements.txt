@@ -1,0 +1,33 @@
+# Managed via uv — see pyproject.toml at project root.
+# This file mirrors pyproject.toml for reference only.
+# To add a package: uv add <package>
+# To sync: uv sync
+
+# LLM / agent pipeline
+openai>=1.0.0
+langgraph>=0.2.0
+langchain-core>=0.3.0
+langsmith>=0.1.0
+pydantic>=2.0.0
+
+# data / numerics
+numpy>=1.24
+pandas>=2.0.0
+scipy>=1.11
+statsmodels>=0.14
+pyarrow>=14.0
+
+# Kalman filters (workspace scripts)
+filterpy>=1.4
+pykalman>=0.11
+
+# volatility / time-series research
+arch>=7.0
+hurst>=0.0.5
+
+# technical indicators (workspace scripts)
+ta>=0.11
+
+# utilities
+python-dotenv>=1.0.0
+structlog>=24.0

@@ -1,0 +1,271 @@
+# Funding Divergence Arbitrage — Research Hypotheses
+# ====================================================
+# See docs/FundingDivergenceStrategy.md for full strategy context.
+#
+# Core signal: funding_z = (asset_funding - peer_mean) / peer_std
+#
+# DIRECTION CONVENTION (critical — read before coding):
+#   generate_single_asset_signals(z_scores=funding_z, entry_z=2.0):
+#     z >= +2.0  →  ENTER_SHORT  (funding HIGH vs peers → short)
+#     z <= -2.0  →  ENTER_LONG   (funding LOW vs peers  → long)
+#   Pass z_scores=funding_z (NO inversion). Inversion reverses directions.
+#
+# EMPIRICAL FINDING (2024-2025 scan, 25-symbol universe):
+#   With any L1 peer group, funding_z rarely exceeds +2.0 for individual symbols
+#   because all L1 alts move together in bull markets (correlated funding).
+#   → SHORT signals are absent in current universe.
+#   → LONG signals (funding_z < -2.0) exist: BNB, ATOM, DOT, etc.
+#     These assets have structurally lower funding than peers → LONG works.
+#
+#   Approved exp_20260530_121721_0003 (H1, sharpe=0.78) is actually H7:
+#     LONG BNB/ATOM/DOT when their funding is 2σ BELOW peer group.
+#     WR=63%, PF=3.23, sharpe=0.88 (ATOM) — valid but not SHORT strategy.
+#
+#   Pre-research win rates (AVAX 83%, ATOM 75% after funding_z>2.0) were
+#   computed with small peer groups; in current 25-symbol universe those
+#   symbols never generate z>2.0 SHORT signals.
+#
+#   SOL ANOMALY: SOL has chronically HIGH funding → generates LONG signals
+#   when peer group is large (SOL always above mean) — exclude from entries.
+#
+# Goal: trades>=30, avg_duration<=72h, sharpe>=0.60, PF>=1.3, DD>=-15%
+
+---
+
+## H1 — Signal Existence: LONG Low-Funding Assets (funding_z < -2.0)
+
+**Claim:** When an asset's funding is 2σ BELOW its L1 peer group, it is
+underweight vs peers → LONG entry. Approved result confirms this works:
+exp_20260530_121721_0003: BNB+ATOM+DOT, sharpe=0.78, PF=2.91, dd=-7.05%.
+
+**Why LONG, not SHORT:**
+In 2024-2025 bull market, all L1 alts have correlated high funding.
+No individual asset exceeds +2σ above the L1 group (SHORT signal absent).
+But some assets (BNB, ATOM, DOT) have structurally lower funding → LONG.
+
+**This is a CODE TASK.**
+- Use compute_peer_funding_zscore() — returns funding_z per symbol
+- Pass z_scores=funding_z (NO inversion) to generate_single_asset_signals()
+- z <= -2.0 → ENTER_LONG (engine convention)
+- Do NOT pass -funding_z (inverted) — that reverses all directions
+
+**Parameters:**
+- Peer group: ALL symbols from inp["symbols"]
+- Funding lookback: 90 payments
+- entry_z=2.0 (triggers LONG when z < -2.0)
+- exit_z=0.5 (exit when funding returns toward peer mean)
+- max_holding_candles=18 (72h), stop_pct=0.07
+
+**MANDATORY exclusions:**
+- SOLUSDT: chronically high funding → always generates LONG signals (anomaly,
+  produces infinite signals, not a real divergence)
+- BNBUSDT: structurally negative funding → use with caution, verify not overfitting
+  to BNB's structural anomaly
+
+**Expand the symbol universe:** test TIAUSDT, JUPUSDT, DRIFTUSDT, DOLOUSDT,
+ZETAUSDT, TRXUSDT — any that have funding below peer mean will generate LONG signals.
+Use per-symbol gate: keep only if per-symbol sharpe ≥ 0.
+
+**Success criteria:** total_trades ≥ 30, avg_duration_hours ≤ 72,
+sharpe ≥ 0.60, profit_factor ≥ 1.3, max_drawdown_pct ≥ -15%.
+
+---
+
+## H2 — Entry Threshold Optimization (2.0 vs 2.5 vs 3.0)
+
+**Claim:** Higher threshold (2.5-3.0) produces fewer but cleaner signals.
+At z=3.0, asset is paying 3× more than peers — reversion pressure is extreme.
+
+**Research questions:**
+- Does z=2.5 improve PF vs z=2.0 (fewer false signals)?
+- Does z=3.0 reduce trade count below 30 (too selective)?
+
+**Parameters:** same as H1 but vary entry threshold: 2.5, then 3.0.
+One experiment per threshold value.
+
+---
+
+## H3 — Relative Pairs Strategy (SHORT Asset + LONG Peer Basket)
+
+**Claim:** Adding a LONG peer basket hedge improves sharpe by removing
+sector directional exposure. You capture ONLY the funding dispersion reversal,
+not the absolute market direction.
+
+**Implementation:** For each SHORT signal on asset A:
+- SHORT asset A
+- LONG equal-weight basket of peers (excluding A and SOL)
+- Track combined PnL: (short_A_pnl + long_basket_pnl) / 2
+
+**Research questions:**
+- Does hedging reduce max_drawdown significantly?
+- Does it improve sharpe even if it reduces absolute PnL?
+
+---
+
+### Retired H4 — Combined Signal: Funding Z + Price Z Confirmation
+
+**Claim:** Requiring both high relative funding AND elevated price z-score
+(asset is overpriced AND overowned) reduces false signals.
+
+**Signal:**
+  funding_z > 2.0 AND price_z > 1.0 (price also above its rolling mean)
+
+**Research questions:**
+- Does double confirmation reduce false signals vs funding-only?
+- At what price_z threshold does signal quality peak?
+
+**Execution policy:** retired from the LLM-agent loop. Test this with
+`python -m agent_research.funding_grid_search` so price-z filters are applied
+deterministically as entry gates, not regenerated by the coder.
+
+---
+
+### Retired H5 — Symbol Selection via Full-Universe Signal Density Audit
+
+**Claim:** The strategy works, but APT is mediocre. A 646-symbol scan vs L1 anchor found
+symbols with 60-72% raw win rate at z>2.0 — far better than APT's 49%.
+
+**Architecture (CRITICAL):**
+- Peer group = fixed L1 anchor (10 symbols). Trade symbols are OUTSIDE the peer group.
+- Each candidate's z-score = (its_funding - anchor_mean) / anchor_std
+- This avoids correlated symbols normalising each other (why OP+ARB both gave 0 trades).
+- L1 ANCHOR: APTUSDT, AVAXUSDT, ATOMUSDT, NEARUSDT, SOLUSDT, DOTUSDT,
+             ETHUSDT, BTCUSDT, LINKUSDT, AAVEUSDT
+  Implementation: pass anchor + trade_symbols to compute_peer_funding_zscore();
+  the function self-excludes each symbol when computing its own z.
+
+**Full-universe signal audit (2024-01-01 → 2026-05-30, z vs L1 anchor):**
+
+PRIME TIER — WR ≥ 63%, z>2.0 ≥ 30 events (confirmed via 48h price horizon):
+  TRXUSDT     43 events  72% WR   1.6% spike_rate  ← strongest signal
+  COTIUSDT    54 events  70% WR   2.1%
+  USELESSUSDT 66 events  69% WR   2.5%
+  PERPUSDT    42 events  67% WR   1.6%
+  DRIFTUSDT   43 events  65% WR   1.6%
+  ASTRUSDT    86 events  63% WR   3.3%  ← highest frequency in prime tier
+  SUIUSDT     67 events  63% WR   2.6%  (was 29% win in H1 — wrong peer group)
+  ZETAUSDT    75 events  63% WR   2.9%
+  SEIUSDT     79 events  62% WR   3.0%
+  LDOUSDT     88 events  60% WR   3.4%  ← best frequency+quality combo
+  MOODENGUSDT 86 events  60% WR   3.3%
+
+REFERENCE:
+  APTUSDT    117 events  49% WR   4.4%  ← mediocre raw WR; backtest 69% due to exit filters
+
+DO NOT TRADE: SOLUSDT (anomaly), DOTUSDT (confirmed drag), AVAXUSDT/ATOMUSDT (3-9 events only)
+
+**THIS IS A CODE TASK — TWO PHASES:**
+
+Phase 1 (CURRENT PRIORITY): TRX + LDO + DRIFT + ASTR with L1 anchor peer group.
+- Start with 4 confirmed prime candidates (diverse frequency: 43+88+43+86 = 260 signals)
+- Peer group for z-score: L1 ANCHOR (10 symbols above) + TRXUSDT + LDOUSDT + DRIFTUSDT + ASTRUSDT
+  (compute_peer_funding_zscore self-excludes each symbol from its own z computation)
+- Entry symbols: TRXUSDT, LDOUSDT, DRIFTUSDT, ASTRUSDT
+- Parameters: entry_z=2.0, exit_z=0.5, stop_pct=0.07, max_holding_candles=12, lookback_payments=90
+- CRITICAL direction: pass z_scores=funding_z_aligned (NOT inverted).
+  z <= -entry_z → ENTER_LONG (funding LOW vs peers = underweight = long).
+  This is what the approved experiment does. Inverted z would reverse directions.
+  Reference: approved exp_20260530_121721_0003 — LONG BNB/ATOM/DOT, sharpe=0.78.
+- Per-symbol gate: exclude any symbol if per-symbol sharpe < 0.0 OR stop_rate > 35%
+- Expected: ~120-150 distinct trades, avg_duration ~40-50h, sharpe > 0.60
+
+Phase 2 (expand or replace based on Phase 1 per-symbol results):
+- Add SUIUSDT, ZETAUSDT, SEIUSDT if Phase 1 sharpe < 0.60
+- Remove any Phase 1 symbol with per-symbol sharpe < 0
+- If Phase 1 passes goal: add more prime symbols one at a time
+
+**Parameters:**
+- entry_z=2.0, exit_z=0.5, stop_pct=0.07, max_holding_candles=12, lookback_payments=90
+- start_date: use inp["start_date"] from runtime (2024-01-01)
+- MANDATORY: exclude SOLUSDT and DOTUSDT from trade entries at all times
+
+**Success criteria:** sharpe ≥ 0.60, pf ≥ 1.3, dd ≥ -15%, trades ≥ 30.
+Per-symbol report: trade count, win rate, sharpe, stop rate for each symbol.
+Include per-symbol gate logic in code (programmatic exclusion of bad symbols).
+
+**Execution policy:** retired from the LLM-agent loop. Symbol scope, threshold,
+holding, stop, side, and price-z combinations are now searched by
+`python -m agent_research.funding_grid_search`.
+
+---
+
+## H6 — Peer Group Robustness and Settlement Alignment
+
+**Claim:** Under the contemporaneous funding-z definition, edge quality depends
+more on peer-group composition and settlement alignment than on historical
+lookback smoothing.
+
+**Parameters to vary:** peer-group membership, settlement alignment rules,
+and raw-funding positivity gate. Hold fixed: H1 best config.
+
+---
+
+## H7 — Long Side: LONG When Funding_z < -2.0
+
+**Claim:** When an asset has funding significantly BELOW peers, it is being
+shorted by the crowd. This creates a "paid to be long" setup — you receive
+funding AND benefit from potential short squeeze.
+
+**Research questions:**
+- Does funding_z < -2.0 predict upward price reversion?
+- Is the edge symmetric (long and short side equal)?
+- Which assets show strongest long-side signal?
+
+**Note:** BNB has chronically negative funding (-0.003%/8h mean) — it's a
+special case that might dominate. Test with and without BNB.
+
+---
+
+## H9 — Funding Divergence Short with Asset Quality Filter
+
+**Claim:** Funding extremes on "quality" assets (stable, liquid, historically
+reverting) produce a reliable SHORT edge. Funding extremes on "toxic" assets
+(erratic funding, anomalous vol, no historical reversion) are dangerous and
+should be skipped. Applying `compute_asset_quality_score()` as a hard gate
+before every SHORT entry should increase win rate and reduce max drawdown
+vs the unfiltered baseline (H1/H5).
+
+**Two-layer architecture:**
+1. Signal layer — `funding_z > 2.0` (same as H1)
+2. Selection layer — `quality_pass == True` (new gate, all six sub-filters must pass)
+
+**This is a CODE TASK — single-asset SHORT strategy on 4h.**
+
+Use `compute_asset_quality_score()` from workspace_helpers. Call it ONCE per
+symbol before the signal loop. See the function's USAGE docstring for the
+exact call pattern.
+
+**Quality sub-filters (all must pass):**
+- `vol_regime_ok`       — 24h realized vol < 3× 30d baseline
+- `price_surge_ok`      — abs(24h return) < 20%  (no meme pump)
+- `liquidity_ok`        — volume > 30% of rolling average  (not thin)
+- `funding_spike_ok`    — raw funding rate < 8× 90d average  (no flash spike)
+- `funding_cv_ok`       — funding CV < 3.5  (consistent, not chronic spikes)
+- `historical_edge_ok`  — past high-funding SHORTs on this asset were ≥ 52% win rate
+
+**Parameters:**
+- Peer group: ALL symbols from inp["symbols"]
+- Funding lookback: 90 payments (30 days)
+- Entry: `funding_z > 2.0` AND `quality_pass == True`
+- Exit: `funding_z < 0.5` OR `max_holding_candles=18` (72h) OR `stop_pct=0.07`
+- `stop_z=99` (disabled — use price stop only)
+- Universe: full 17-symbol set — the quality filter will naturally exclude
+  SOLUSDT (anomalous), BNBUSDT (chronic negative funding), and any meme spikes
+
+**CRITICAL — SOL ANOMALY still applies:**
+Even if quality filter passes SOLUSDT, exclude it from SHORT entries explicitly.
+SOL outperforms after high relative funding — this is a known exception.
+
+**Expected behavior vs unfiltered baseline:**
+- Fewer trades (quality filter rejects some signals)
+- Higher win rate (fewer toxic entries)
+- Lower stop rate (no catastrophic stops on pathological assets)
+- Better sharpe (more consistent returns, same or better drawdown)
+
+**If trade count drops below 30:** loosen `liquidity_ratio_min` to 0.20
+and `edge_min_samples` to 3 — the filter may be too strict for the available
+universe. Report which filter is responsible for the most rejections in the
+notes (quality DataFrame columns allow easy counting).
+
+**Success criteria:** trades ≥ 30, avg_duration ≤ 72h, sharpe ≥ 0.60,
+profit_factor ≥ 1.3, max_drawdown ≥ -15%.

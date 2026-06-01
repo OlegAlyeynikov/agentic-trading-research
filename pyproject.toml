@@ -1,0 +1,32 @@
+[project]
+name = "agent-backtest"
+version = "0.1.0"
+description = "Autonomous statistical arbitrage research and backtest platform"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    # LLM / agent pipeline
+    "openai>=1.0.0",
+    "langgraph>=0.2.0",
+    "langchain-core>=0.3.0",
+    "langsmith>=0.1.0",
+    "pydantic>=2.0.0",
+    # data / numerics
+    "numpy>=1.24",
+    "pandas>=2.0.0",
+    "scipy>=1.11",
+    "statsmodels>=0.14",
+    "pyarrow>=14.0", # pkl / parquet I/O support
+    # Kalman filters (workspace scripts)
+    "filterpy>=1.4",
+    "pykalman>=0.11",
+    # volatility / time-series research
+    "arch>=7.0", # GARCH, ADF, volatility models
+    "hurst>=0.0.5", # Hurst exponent for mean-reversion detection
+    # technical indicators (workspace scripts)
+    "ta>=0.11", # ATR, RSI, Bollinger — regime detection
+    # utilities
+    "python-dotenv>=1.0.0",
+    "structlog>=24.0",
+    "aiohttp>=3.13.5",
+]

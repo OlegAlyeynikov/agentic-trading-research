@@ -1,0 +1,27 @@
+{
+  "data_dir": "./data",
+  "funding_rates_dir": "./data/new_data/funding_rates",
+  "available_timeframes": ["1m", "5m", "15m", "1h", "4h"],
+  "start_date": "2024-01-01",
+  "goal_contract": {
+    "primary_metric": "research_score",
+    "min_sharpe_proxy": 0.6,
+    "min_profit_factor": 1.3,
+    "max_drawdown_pct": -15.0,
+    "min_total_trades": 30,
+    "max_avg_duration_hours": 72.0,
+    "min_pairs": 0,
+    "require_clean_data": true
+  },
+  "symbols": [
+    "BTCUSDT",
+    "ETHUSDT",
+    "BNBUSDT",
+    "SOLUSDT"
+  ],
+  "_notes": {
+    "data_dir": "Use your own local historical candles directory. Do not commit datasets.",
+    "funding_rates_dir": "Use your own local funding-rate files. Do not commit downloaded market data.",
+    "symbols": "Replace with the universe available in your local data."
+  }
+}
